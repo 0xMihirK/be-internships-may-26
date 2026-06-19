@@ -1,0 +1,7 @@
+node_modules/
+.env
+
+# sqlite write-ahead files and the dbs created by tests
+data/*-wal
+data/*-shm
+data/test-*.db
