@@ -1,4 +1,4 @@
-# Signals Challenge (Node.js + Fastify)
+# Signals Challenge (SOLVED)
 
 Build a minimal production-leaning service that can **handle load**, **rate limit**, and **avoid duplicates** via idempotency.
 
