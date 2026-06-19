@@ -1,0 +1,9 @@
+node_modules/
+.env
+
+# SQLite WAL side files created at runtime
+data/*.db-wal
+data/*.db-shm
+
+# temp databases the tests spin up
+*.test.db
