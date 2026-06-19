@@ -66,10 +66,17 @@ export async function postSignal(req, reply) {
   } catch (err) {
     // Lost the race - another request inserted this key first. The UNIQUE
     // constraint is what keeps us duplicate-free across requests/instances;
-    // return the row that won.
+    // fetch and return the row that won.
     if (idem && isUniqueViolation(err)) {
-      const existing = await withRetry(() => getByIdemKey(idem));
-      if (existing) return existing;
+      try {
+        const existing = await withRetry(() => getByIdemKey(idem));
+        if (existing) return existing;
+      } catch (lookupErr) {
+        // The winning row exists, we just couldn't read it back right now.
+        // Report it as transient so the client retries instead of getting a 500.
+        req.log.error({ err: lookupErr, ctx: 'idempotency_recover' });
+        return reply.code(503).send({ error: 'db_unavailable' });
+      }
     }
     req.log.error({ err, ctx: 'insertSignal' });
     return reply.code(503).send({ error: 'db_unavailable' });
