@@ -1,38 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { setTimeout as wait } from 'node:timers/promises';
-import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { request, waitForHealth } from './helpers.js';
 
-test('idempotency returns same resource for same key', async () => {
-  const proc = spawn('node', ['src/server.js'], { env: { ...process.env, API_KEY: 'k', PORT: '9091' } });
-  await wait(300);
-
-  const base = 'http://localhost:9091';
-  const idem = 'same-key';
-
-  const a = await postJson(`${base}/v1/signals`, {
-    headers: { 'x-api-key': 'k', 'Idempotency-Key': idem },
-    body: { userId: 'u1', type: 'note', payload: 'x' }
-  });
-  const b = await postJson(`${base}/v1/signals`, {
-    headers: { 'x-api-key': 'k', 'Idempotency-Key': idem },
-    body: { userId: 'u1', type: 'note', payload: 'x' }
+test('same idempotency key returns the same resource', async () => {
+  const dbPath = path.join(os.tmpdir(), `signals-idem-${Date.now()}.test.db`);
+  const proc = spawn('node', ['src/server.js'], {
+    env: { ...process.env, API_KEY: 'k', PORT: '9091', DATABASE_URL: dbPath },
   });
 
-  assert.equal(a.id, b.id);
-  assert.equal(a.idempotencyKey, b.idempotencyKey);
-  proc.kill();
+  try {
+    const base = 'http://localhost:9091';
+    await waitForHealth(base);
+
+    const headers = { 'x-api-key': 'k', 'Idempotency-Key': 'same-key' };
+    const body = { userId: 'u1', type: 'note', payload: 'x' };
+
+    const a = await request(`${base}/v1/signals`, { method: 'POST', headers, body });
+    const b = await request(`${base}/v1/signals`, { method: 'POST', headers, body });
+
+    assert.equal(a.status, 200);
+    assert.equal(a.body.id, b.body.id);
+    assert.equal(a.body.idempotencyKey, b.body.idempotencyKey);
+  } finally {
+    proc.kill();
+  }
 });
-
-async function postJson(url, { headers, body }){
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const req = http.request(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers } }, (res) => {
-      let chunks=''; res.on('data', d => chunks+=d);
-      res.on('end', () => resolve(JSON.parse(chunks||'{}')));
-    });
-    req.on('error', reject);
-    req.write(data); req.end();
-  });
-}
