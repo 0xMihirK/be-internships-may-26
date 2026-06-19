@@ -6,6 +6,12 @@ const dbPath = process.env.DATABASE_URL || './data/signals.db';
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
 
+// Better behaviour under concurrent access: WAL lets reads and a write run at
+// the same time, and busy_timeout waits for a brief lock instead of erroring.
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 5000');
+
 // schema
 db.exec(`
 CREATE TABLE IF NOT EXISTS signals (
@@ -51,4 +57,13 @@ export function listSignals(userId, limit) {
     'SELECT id, user_id as userId, type, payload, idempotency_key as idempotencyKey, created_at as createdAt FROM signals WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
   );
   return stmt.all(userId, limit);
+}
+
+// True for a UNIQUE constraint clash - two requests raced the same key and one
+// lost. We treat that as "already created", not a failure. Different from the
+// transient SQLITE_BUSY errors, which are worth retrying.
+export function isUniqueViolation(err) {
+  if (!err) return false;
+  if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') return true;
+  return err.code === 'SQLITE_CONSTRAINT' && /UNIQUE/i.test(err.message || '');
 }
