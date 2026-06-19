@@ -1,4 +1,4 @@
-# Signals Challenge (Node.js + Fastify)
+# Signals Challenge (Solved)
 
 > **Status: solved.** All tasks below are implemented and `npm test` passes. See [How it works](#how-it-works) for the approach.
 
